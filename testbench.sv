@@ -65,9 +65,11 @@ class counter_sequence extends uvm_sequence #(counter_item);
     finish_item(req);
   
     repeat(10) begin
+      req = counter_item::type_id::create("req");
       start_item(req);
       if(!req.randomize())
         `uvm_error("[Sequence]","Randomize Failed");
+      finish_item(req);
     end
   endtask
 endclass
@@ -232,29 +234,36 @@ class counter_scoreboard extends uvm_scoreboard;
     ref_count = 0;
   endfunction
   
-  virtual function void write(counter_item trans);
-  	
+virtual function void write(counter_item trans);
+    
+    if (trans.rst_n == 0) begin
+       if (trans.data_out !== 0) 
+         `uvm_error("SCB", "Reset fail! Data_out is not 0")
+    end 
+    else begin 
+       if(trans.data_out !== ref_count) begin
+         `uvm_error("[Scoreboard]", $sformatf("MISMATCH! mode=%b pause=%b | DUT=%0d != REF=%0d", 
+                                              trans.mode, trans.pause, trans.data_out, ref_count))
+       end else begin
+         `uvm_info("[Scoreboard]", $sformatf("PASS! DUT=%0d == REF=%0d", 
+                                             trans.data_out, ref_count), UVM_LOW)
+       end
+    end
+
+
     if(!trans.rst_n) begin
-    	ref_count = 0;
-      `uvm_info(get_type_name(), "Reset...", UVM_HIGH)
+      ref_count = 0;
     end
     else if(trans.pause) begin
-    	ref_count = ref_count;
+      ref_count = ref_count; 
     end
     else begin
       if(trans.mode == 1) 
-      	ref_count--;
+        ref_count--; 
       else 
-        ref_count++;
+        ref_count++; 
     end
     
-//     compare act_data and expect_data 
-    if(trans.data_out !== ref_count) begin
-      `uvm_error("[Scoreboard]", $sformatf("MISMATCH! mode = %0b, pause = %0b, | DUT_Out = %0d != REF_Out = %0d", trans.mode, trans.pause, trans.data_out, ref_count))
-    end
-    else begin
-    	`uvm_info("[Scoreboard]", $sformatf("PASS! DUT = %0d | REF = %0d", trans.data_out,ref_count), UVM_HIGH)
-    end
   endfunction
 endclass
     
@@ -315,6 +324,9 @@ class counter_test extends uvm_test;
     `uvm_info("TEST","Sequence Start test ...", UVM_LOW)
     
     seq.start(env.agent.sequencer);
+    
+    `uvm_info("TEST","Sequence FINISHED! ALL ITEMS SENT ...", UVM_LOW)
+    
     #10ns;
     phase.drop_objection(this);
     
@@ -350,13 +362,4 @@ module testbench;
   end
 endmodule
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+   
